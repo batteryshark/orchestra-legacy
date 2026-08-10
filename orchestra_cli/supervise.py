@@ -144,13 +144,13 @@ def create_followup(con, root: Path, parent: dict, requester: str, text: str,
         base_commit = worktree.head(Path(parent["workdir"]))
     cur = con.execute(
         "INSERT INTO runs(agent, backend, model, title, work_item, team, requested_by, "
-        "workdir, branch, parent_run, lead_run, child_depth, session_ref, allow_question, "
+        "harness_session, workdir, branch, parent_run, lead_run, child_depth, session_ref, allow_question, "
         "question_wait_seconds, verification_required, verification_status, "
         "required_capabilities_json, writes_tree, base_commit, status, started_at) "
-        "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'spawning', ?)",
+        "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'spawning', ?)",
         (parent["agent"], parent["backend"], parent["model"],
          title or f"continuation of run {parent['id']}", parent["work_item"], parent["team"],
-         requester, parent["workdir"], parent["branch"], parent["id"],
+         requester, parent.get("harness_session"), parent["workdir"], parent["branch"], parent["id"],
          parent.get("lead_run"), parent.get("child_depth", 0), parent["session_ref"],
          allow_question, question_wait,
          int(parent.get("verification_required", 0)),

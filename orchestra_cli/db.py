@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS runs (
   work_item TEXT,
   team TEXT,
   requested_by TEXT NOT NULL,
+  harness_session TEXT,
   brief_path TEXT,
   log_path TEXT,
   workdir TEXT NOT NULL,
@@ -197,6 +198,11 @@ def _apply_migrations(con: sqlite3.Connection) -> None:
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_runs_slug_unique "
         "ON runs(slug) WHERE slug IS NOT NULL"
     )
+
+    # User-level harness hooks are global, so ownership must include the exact
+    # originating conversation rather than merely its profile and repository.
+    if not _has_column(con, "runs", "harness_session"):
+        con.execute("ALTER TABLE runs ADD COLUMN harness_session TEXT")
 
     # W-0015: native child runs. ``parent_run`` already means a backend
     # session continuation, so child ownership must remain a separate edge.

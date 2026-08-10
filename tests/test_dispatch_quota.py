@@ -109,6 +109,19 @@ class DispatchQuotaHookTests(unittest.TestCase):
         self.assertEqual(self._stub.calls, 0,
                          "no_quota_warn should skip the snapshot call")
 
+    def test_dispatch_records_originating_harness_session(self) -> None:
+        args = self._make_args("minimax", no_quota_warn=True)
+        with mock.patch.dict(
+            "os.environ", {"ORCHESTRA_HARNESS_SESSION": "conversation-42"}, clear=False
+        ):
+            self._run_dispatch(args)
+        con = db.connect(self.root)
+        try:
+            row = con.execute("SELECT harness_session FROM runs").fetchone()
+        finally:
+            con.close()
+        self.assertEqual(row["harness_session"], "conversation-42")
+
     def test_supervised_worker_must_use_brokered_spawn(self) -> None:
         args = self._make_args("minimax", no_quota_warn=True)
         with mock.patch.dict(

@@ -119,11 +119,13 @@ def create(con: sqlite3.Connection, root: Path, cfg: dict, parent: sqlite3.Row,
                 try:
                     cur = con.execute(
                         "INSERT INTO runs(agent, backend, model, title, work_item, team, "
-                        "requested_by, workdir, slug, lead_run, spawn_request_id, child_depth, "
+                        "requested_by, harness_session, workdir, slug, lead_run, "
+                        "spawn_request_id, child_depth, "
                         "status, started_at) "
-                        "VALUES(?,?,?,?,?,?,?,?,?,?,?,?, 'spawning', ?)",
+                        "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?, 'spawning', ?)",
                         (target, agent["backend"], display_model, title or mission[:80],
-                         parent["work_item"], parent["team"], parent["agent"], str(root), slug,
+                         parent["work_item"], parent["team"], parent["agent"],
+                         parent["harness_session"], str(root), slug,
                          parent["id"], spawn_request_id,
                          int(parent["child_depth"] or 0) + 1, db.now()),
                     )

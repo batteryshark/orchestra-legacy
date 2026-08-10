@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import os
 import tempfile
 import unittest
+from argparse import Namespace
 from pathlib import Path
 from unittest import mock
 
-from orchestra_cli import db, harness_hooks
+from orchestra_cli import cli, db, harness_hooks
 
 
 class HarnessHookTests(unittest.TestCase):
@@ -23,13 +26,26 @@ class HarnessHookTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.tmp.cleanup()
 
-    def _message(self, *, kind: str | None, body: str) -> int:
+    def _run(self, session: str, *, status: str = "done") -> int:
         con = db.connect(self.root)
         try:
             cur = con.execute(
-                "INSERT INTO messages(sender,recipient,body,kind,created_at) "
-                "VALUES('worker','codex',?,?,?)",
-                (body, kind, db.now()),
+                "INSERT INTO runs(agent,backend,requested_by,harness_session,workdir,"
+                "status,started_at) VALUES('worker','codex','codex',?,?,?,?)",
+                (session, str(self.root), status, db.now()),
+            )
+            con.commit()
+            return int(cur.lastrowid)
+        finally:
+            con.close()
+
+    def _message(self, *, run_id: int, kind: str | None, body: str) -> int:
+        con = db.connect(self.root)
+        try:
+            cur = con.execute(
+                "INSERT INTO messages(sender,recipient,body,run_id,kind,created_at) "
+                "VALUES('worker','codex',?,?,?,?)",
+                (body, run_id, kind, db.now()),
             )
             con.commit()
             return int(cur.lastrowid)
@@ -37,10 +53,17 @@ class HarnessHookTests(unittest.TestCase):
             con.close()
 
     def test_claims_consultation_without_stealing_runner_interrupt(self) -> None:
-        interrupt_id = self._message(kind="interrupt", body="[INTERRUPT] use v2")
-        consultation_id = self._message(kind="consult", body="CONSULT run 4: v1 or v2?")
+        run_id = self._run("session-a")
+        interrupt_id = self._message(
+            run_id=run_id, kind="interrupt", body="[INTERRUPT] use v2"
+        )
+        consultation_id = self._message(
+            run_id=run_id, kind="consult", body="CONSULT run 4: v1 or v2?"
+        )
 
-        prompt = harness_hooks.wait_for_attention(self.root, poll_interval=0.01)
+        prompt = harness_hooks.wait_for_attention(
+            self.root, "session-a", poll_interval=0.01
+        )
 
         self.assertIn("CONSULT run 4", prompt)
         con = db.connect(self.root)
@@ -61,8 +84,8 @@ class HarnessHookTests(unittest.TestCase):
         con = db.connect(self.root)
         try:
             cur = con.execute(
-                "INSERT INTO runs(agent,backend,requested_by,workdir,status,started_at) "
-                "VALUES('codex','codex','codex',?,'running',?)",
+                "INSERT INTO runs(agent,backend,requested_by,harness_session,workdir,"
+                "status,started_at) VALUES('codex','codex','codex','session-a',?,'running',?)",
                 (str(self.root), db.now()),
             )
             con.commit()
@@ -76,8 +99,58 @@ class HarnessHookTests(unittest.TestCase):
             clear=False,
         ):
             self.assertIsNone(
-                harness_hooks.wait_for_attention(self.root, poll_interval=0.01)
+                harness_hooks.wait_for_attention(
+                    self.root, "session-a", poll_interval=0.01
+                )
             )
+
+    def test_different_session_cannot_claim_messages_or_wait_on_runs(self) -> None:
+        run_id = self._run("session-a", status="running")
+        message_id = self._message(
+            run_id=run_id, kind="consult", body="session A only"
+        )
+
+        self.assertIsNone(
+            harness_hooks.wait_for_attention(
+                self.root, "session-b", poll_interval=0.01
+            )
+        )
+        con = db.connect(self.root)
+        try:
+            self.assertIsNone(
+                con.execute(
+                    "SELECT read_at FROM messages WHERE id=?", (message_id,)
+                ).fetchone()["read_at"]
+            )
+        finally:
+            con.close()
+
+        prompt = harness_hooks.wait_for_attention(
+            self.root, "session-a", poll_interval=0.01
+        )
+        self.assertIn("session A only", prompt)
+
+    def test_claude_binding_persists_session_environment(self) -> None:
+        env_file = self.root / "claude-env"
+        context = harness_hooks.bind_session("claude", "session-a", str(env_file))
+        self.assertIn("--harness-session session-a", context)
+        self.assertEqual(
+            env_file.read_text(encoding="utf-8"),
+            "export ORCHESTRA_HARNESS_SESSION=session-a\n",
+        )
+
+    def test_session_start_is_silent_outside_orchestra_project(self) -> None:
+        args = Namespace(backend="codex", bind=True, session=None)
+        output = io.StringIO()
+        with (
+            mock.patch.object(
+                cli.paths, "find_root", side_effect=SystemExit("not an Orchestra project")
+            ),
+            mock.patch("sys.stdin", io.StringIO('{"session_id":"session-a"}')),
+            contextlib.redirect_stdout(output),
+        ):
+            cli.cmd_hook(args)
+        self.assertEqual(output.getvalue(), "")
 
     def test_backend_results_continue_only_when_attention_is_needed(self) -> None:
         prompt = "worker finished"
@@ -88,18 +161,27 @@ class HarnessHookTests(unittest.TestCase):
         self.assertEqual(json.loads(harness_hooks.render_hook_result("claude", None)), {})
 
     def test_install_merges_existing_hooks_and_preserves_other_settings(self) -> None:
-        codex = self.root / ".codex" / "hooks.json"
+        codex = self.root / "codex-home" / "hooks.json"
         codex.parent.mkdir()
         codex.write_text(
             json.dumps({"hooks": {"Stop": [{"hooks": [{"command": "other"}]}]}}),
             encoding="utf-8",
         )
-        claude = self.root / ".claude" / "settings.json"
+        claude = self.root / "claude-home" / "settings.json"
         claude.parent.mkdir()
         claude.write_text(json.dumps({"permissions": {"allow": ["Read"]}}), encoding="utf-8")
 
-        first = harness_hooks.install(self.root)
-        second = harness_hooks.install(self.root)
+        with mock.patch.dict(
+            os.environ,
+            {
+                "CODEX_HOME": str(codex.parent),
+                "CLAUDE_CONFIG_DIR": str(claude.parent),
+                "XDG_CONFIG_HOME": str(self.root / "xdg"),
+            },
+            clear=False,
+        ):
+            first = harness_hooks.install_global()
+            second = harness_hooks.install_global()
 
         codex_data = json.loads(codex.read_text(encoding="utf-8"))
         claude_data = json.loads(claude.read_text(encoding="utf-8"))
@@ -109,12 +191,22 @@ class HarnessHookTests(unittest.TestCase):
             for hook in group["hooks"]
         ]
         self.assertEqual(commands, ["other", "orchestra hook --backend codex"])
+        start_commands = [
+            hook["command"]
+            for group in codex_data["hooks"]["SessionStart"]
+            for hook in group["hooks"]
+        ]
+        self.assertEqual(start_commands, ["orchestra hook --backend codex --bind"])
         self.assertEqual(claude_data["permissions"], {"allow": ["Read"]})
         self.assertIn("installed", " ".join(first))
         self.assertTrue(all("already present" in status for status in second))
         self.assertIn(
             'event.type !== "session.idle"',
-            (self.root / ".opencode" / "plugins" / "orchestra.js").read_text(),
+            (self.root / "xdg" / "opencode" / "plugins" / "orchestra.js").read_text(),
+        )
+        self.assertIn(
+            '"shell.env"',
+            (self.root / "xdg" / "opencode" / "plugins" / "orchestra.js").read_text(),
         )
 
 

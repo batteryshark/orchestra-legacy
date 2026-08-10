@@ -77,6 +77,8 @@ class MigrationTests(unittest.TestCase):
             # The newly-migrated column must be present and NULL.
             self.assertIn("slug", row.keys())
             self.assertIsNone(row["slug"])
+            self.assertIn("harness_session", row.keys())
+            self.assertIsNone(row["harness_session"])
             self.assertEqual(row["allow_question"], 0)
             self.assertEqual(row["question_wait_seconds"], 1800)
             self.assertEqual(row["supervisor_protocol"], 0)

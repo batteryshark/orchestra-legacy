@@ -128,10 +128,6 @@ def cmd_init(args):
         (sd / "config.toml").write_text(docs.PROJECT_CONFIG_STUB)
     gp = config.ensure_global_config()
     db.connect(root).close()
-    try:
-        hook_statuses = harness_hooks.install(root)
-    except RuntimeError as exc:
-        raise SystemExit(f"orchestra: {exc}") from exc
     for doc in ["AGENTS.md", "CLAUDE.md"]:
         p = root / doc
         text = p.read_text(encoding="utf-8") if p.exists() else ""
@@ -151,8 +147,6 @@ def cmd_init(args):
     print(f"  global roster config: {gp}")
     print(f"  playbook: {playbook} ({playbook_status}; "
           "pointers present in AGENTS.md / CLAUDE.md)")
-    print("  harness hooks: " + "; ".join(hook_statuses))
-    print("  note: Codex requires one-time review of new project hooks with `/hooks`")
     if not (root / ".work").is_dir():
         print("  note: no .work workspace here — run `work init .` (or `orchestra init --work`) "
               "so missions can be tracked durably")
@@ -558,14 +552,45 @@ def cmd_consult(args):
 
 
 def cmd_hook(args):
-    """Backend lifecycle adapter used by generated project hook files."""
+    """Backend lifecycle adapter used by installed user-level hook files."""
+    event = {}
+    if not sys.stdin.isatty():
+        try:
+            event = json.load(sys.stdin)
+        except (OSError, UnicodeError, ValueError):
+            event = {}
+    session_id = harness_hooks.valid_session_id(
+        args.session or event.get("session_id")
+    )
+    if args.bind:
+        try:
+            paths.find_root()
+        except SystemExit:
+            return
+        context = harness_hooks.bind_session(
+            args.backend,
+            session_id or "",
+            os.environ.get("CLAUDE_ENV_FILE"),
+        )
+        if context:
+            print(context)
+        return
     try:
         root = paths.find_root()
     except SystemExit:
         print(harness_hooks.render_hook_result(args.backend, None))
         return
-    prompt = harness_hooks.wait_for_attention(root)
+    prompt = harness_hooks.wait_for_attention(root, session_id or "")
     print(harness_hooks.render_hook_result(args.backend, prompt))
+
+
+def cmd_hooks(args):
+    try:
+        statuses = harness_hooks.install_global()
+    except RuntimeError as exc:
+        raise SystemExit(f"orchestra: {exc}") from exc
+    print("harness hooks: " + "; ".join(statuses))
+    print("Codex requires one-time review of the new user hook with `/hooks`.")
 
 
 def cmd_broadcast(args):
@@ -679,6 +704,13 @@ def cmd_dispatch(args):
             "can launch children outside the worker sandbox"
         )
     requester = _identity(args, cfg)
+    raw_harness_session = (
+        getattr(args, "harness_session", None)
+        or os.environ.get("ORCHESTRA_HARNESS_SESSION")
+    )
+    harness_session = harness_hooks.valid_session_id(raw_harness_session)
+    if raw_harness_session and not harness_session:
+        raise SystemExit("orchestra: invalid harness session identifier")
     mission = " ".join(args.mission)
     if args.brief_file:
         mission = Path(args.brief_file).read_text()
@@ -825,13 +857,14 @@ def cmd_dispatch(args):
             try:
                 cur = con.execute(
                     "INSERT INTO runs(agent, backend, model, title, work_item, team, "
-                    "requested_by, workdir, slug, allow_question, question_wait_seconds, "
+                    "requested_by, harness_session, workdir, slug, allow_question, "
+                    "question_wait_seconds, "
                     "verification_required, verification_status, required_capabilities_json, "
                     "writes_tree, base_commit, status, started_at) "
-                    "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (target, agent["backend"], display_model,
                      args.title or mission[:80],
-                     args.work, args.team, requester, str(root), slug,
+                     args.work, args.team, requester, harness_session, str(root), slug,
                      int(allow_question), question_wait,
                      int(verification_required), verification_status,
                      json.dumps(required_capabilities),
@@ -2723,7 +2756,14 @@ def main():
         help="wait for Orchestra events and emit a backend lifecycle response",
     )
     s.add_argument("--backend", choices=("claude", "codex", "opencode"), required=True)
+    s.add_argument("--session", help=argparse.SUPPRESS)
+    s.add_argument("--bind", action="store_true", help=argparse.SUPPRESS)
     s.set_defaults(fn=cmd_hook)
+
+    s = sub.add_parser("hooks", help="install user-level harness lifecycle adapters")
+    hs = s.add_subparsers(dest="hooks_cmd", required=True)
+    hs.add_parser("install", help="install once for Claude, Codex, and OpenCode")
+    s.set_defaults(fn=cmd_hooks)
 
     s = sub.add_parser("broadcast", help="message every member of a team")
     s.add_argument("body")
@@ -2749,6 +2789,7 @@ def main():
     s.add_argument("--title")
     s.add_argument("--context", help="extra context appended to the brief")
     s.add_argument("--brief-file", help="read mission text from a file")
+    s.add_argument("--harness-session", help=argparse.SUPPRESS)
     s.add_argument("--worktree", action="store_true", help="isolate in a git worktree (skills auto-synced)")
     s.add_argument("--after", action="append", type=int, metavar="RUN_ID",
                    help="launch only after this run succeeds (repeatable)")

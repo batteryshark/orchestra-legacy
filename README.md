@@ -142,10 +142,14 @@ requester, the worker continues on its documented assumption, and the requester 
 guidance with `orchestra interrupt RUN "..."`. A child consultation is routed directly to its
 exact active lead run at a safe action boundary; Orchestra never guesses among runs that happen
 to share a profile. Consultations without an active supervised lead remain durable requester
-inbox messages. `orchestra init` installs project-local lifecycle adapters for Claude, Codex,
-and OpenCode. While an interactive harness owns active runs, its stop/idle hook waits for the
-next consultation, question, report, or completion notice and feeds that event back as a
-continuation prompt. Codex requires one-time trust of new project hooks through `/hooks`.
+inbox messages. Install user-level lifecycle adapters once with `orchestra hooks install`; they
+apply to Claude, Codex, and OpenCode across every project. While an interactive harness owns
+active runs, its stop/idle hook waits for the next consultation, question, report, or completion
+notice and feeds that event back as a continuation prompt. Every dispatched run is bound to the
+exact harness session that created it: a hook in another conversation, even in the same project
+and under the same profile, cannot claim its mail or wait on it. Runs launched outside a bound
+harness remain unbound and are deliberately ignored by global hooks. Codex requires one-time
+trust of the new user hooks through `/hooks`.
 `orchestra wait` remains available for shell automation and harnesses with hooks disabled. For a
 contained Operator run, the consultation is recorded for controller/owner review; revised
 instructions and retries remain controller-owned rather than bypassing the approved authority

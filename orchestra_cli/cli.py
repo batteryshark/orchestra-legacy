@@ -3048,7 +3048,7 @@ def main():
                                          "deliver at the next safe action boundary")
     s.add_argument("run_id", type=int)
     interrupt_source = s.add_mutually_exclusive_group(required=True)
-    interrupt_source.add_argument("message", nargs="*", help="message text")
+    interrupt_source.add_argument("message", nargs="*", default=[], help="message text")
     interrupt_source.add_argument("--file", dest="message_file", metavar="PATH",
                                   help="read the complete message from a UTF-8 file")
     s.add_argument("--now", action="store_true",

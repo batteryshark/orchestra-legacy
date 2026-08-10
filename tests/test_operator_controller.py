@@ -19,6 +19,15 @@ from orchestra_cli import (
 
 class OperatorControllerTests(unittest.TestCase):
     def setUp(self) -> None:
+        # tick() reads live provider quota; without this the suite passes or
+        # fails depending on the host account's remaining headroom.
+        usage = mock.patch.object(
+            operator_controller,
+            "default_service",
+            lambda: mock.Mock(snapshot=lambda: {"providers": []}),
+        )
+        usage.start()
+        self.addCleanup(usage.stop)
         self._tmp = tempfile.TemporaryDirectory()
         self.tmp = Path(self._tmp.name)
         self.control = self.tmp / "operator.db"

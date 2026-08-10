@@ -4,6 +4,7 @@ import copy
 import json
 import sqlite3
 import tempfile
+import tomllib
 import unittest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -11,6 +12,7 @@ from unittest import mock
 
 from orchestra_cli import (
     capabilities,
+    config,
     operator_contract,
     operator_roster,
     operator_runtime,
@@ -171,6 +173,14 @@ class OperatorRosterTests(unittest.TestCase):
             profiles["codex-spark"]["pools"],
             profiles["codex"]["pools"],
         )
+
+    def test_bootstrap_respects_default_roster_tiers(self) -> None:
+        policy = operator_roster.bootstrap_policy(tomllib.loads(config.DEFAULT_CONFIG))
+        profiles = {row["name"]: row for row in policy.data["profiles"]}
+
+        self.assertEqual(profiles["deepseek-flash"]["tier"], "workhorse")
+        self.assertEqual(profiles["luna-xhigh"]["tier"], "generalist")
+        self.assertEqual(profiles["codex"]["tier"], "heavy")
 
     def test_policy_version_and_approval_are_hash_bound_and_immutable(self) -> None:
         version = self.save_and_approve_policy()

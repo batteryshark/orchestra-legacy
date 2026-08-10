@@ -90,24 +90,34 @@ class CodexCommandTests(unittest.TestCase):
         for flag in ("--cd", "--sandbox", "--add-dir", "--skip-git-repo-check"):
             self.assertLess(cmd.index(flag), resume_index)
 
-    def test_default_codex_terra_profile_uses_code_mode_capable_model(self):
+    def test_default_profiles_encode_cost_aware_routing_ladder(self):
         cfg = tomllib.loads(config.DEFAULT_CONFIG)
-        self.assertNotIn("codex-55", cfg["agents"])
-        agent = config.agent_cfg(cfg, "codex-terra")
+        self.assertNotIn("codex-terra", cfg["agents"])
+        self.assertEqual(cfg["agents"]["deepseek-flash"]["tier"], 1)
+        self.assertIn("fully specified", cfg["agents"]["deepseek-flash"]["role"])
 
-        cmd = build_cmd(
-            agent,
+        luna = config.agent_cfg(cfg, "luna-xhigh")
+        sol = config.agent_cfg(cfg, "codex")
+        self.assertEqual(luna["tier"], 2)
+        self.assertEqual(sol["tier"], 3)
+
+        luna_cmd = build_cmd(
+            luna,
             workdir="/workspace/project",
             title="run-1",
             prompt="do the work",
         )
+        sol_cmd = build_cmd(
+            sol,
+            workdir="/workspace/project",
+            title="run-2",
+            prompt="do the hard work",
+        )
 
-        enable_index = cmd.index("--enable")
-        self.assertEqual(cmd[enable_index + 1], "code_mode")
-        self.assertEqual(cmd[cmd.index("-m") + 1], "gpt-5.6-terra")
-        self.assertIn("suppress_unstable_features_warning=true", cmd)
-        self.assertLess(enable_index, len(cmd) - 1)
-        self.assertNotIn("code_mode_only", cmd)
+        self.assertEqual(luna_cmd[luna_cmd.index("-m") + 1], "gpt-5.6-luna")
+        self.assertEqual(luna_cmd[luna_cmd.index("-c") + 1], 'model_reasoning_effort="xhigh"')
+        self.assertEqual(sol_cmd[sol_cmd.index("-m") + 1], "gpt-5.6-sol")
+        self.assertEqual(sol_cmd[sol_cmd.index("-c") + 1], 'model_reasoning_effort="high"')
 
 
 class ClaudeCommandTests(unittest.TestCase):

@@ -451,12 +451,20 @@ your own workloads.
 
 | Role | Claude Code | Codex | Kimi K3 |
 |---|---|---|---|
-| Architect | `claude-opus-5` / `high` | `gpt-5.6-sol` / `xhigh` | `kimi-for-coding/k3` / `max` |
-| Scout | `claude-opus-5` / `low` | `gpt-5.6-luna` / `max` | — |
-| Implementer | `claude-opus-5` / `medium` | `gpt-5.6-terra` / `max` | `kimi-for-coding/k3` / `max` |
-| Specialist | `claude-opus-5` / `high` | `gpt-5.6-sol` / `max` | `kimi-for-coding/k3` / `max` |
-| Reviewer | `claude-opus-5` / `high` | `gpt-5.6-sol` / `xhigh` | `kimi-for-coding/k3` / `max` |
-| Review downgrade | `claude-opus-5` / `medium` | `gpt-5.6-sol` / `high` | — |
+| Architect | `claude-opus-5` / `high` | `gpt-5.6-sol` / `high` | `kimi-for-coding/k3` / `max` |
+| Scout | `claude-opus-5` / `low` | `gpt-5.6-luna` / `xhigh` | — |
+| Implementer | `claude-opus-5` / `medium` | `gpt-5.6-luna` / `xhigh` | `kimi-for-coding/k3` / `max` |
+| Specialist | `claude-opus-5` / `high` | `gpt-5.6-sol` / `high` | `kimi-for-coding/k3` / `max` |
+| Reviewer | `claude-opus-5` / `high` | `gpt-5.6-sol` / `high` | `kimi-for-coding/k3` / `max` |
+| Review downgrade | `claude-opus-5` / `medium` | `gpt-5.6-luna` / `xhigh` | — |
+
+For the lowest-cost procedural lane, use `deepseek/deepseek-v4-flash` only
+when the brief is fully specified and the worker can mostly read and execute
+an existing worklist. Use Luna when the task needs bounded interpretation or
+inference. Escalate complex implementation, diagnosis without a known cause,
+architecture, and other open-ended work to Sol. DeepSeek pricing and cache
+benefits depend on the provider and harness, so treat this as field guidance,
+not a benchmark guarantee.
 
 Set `effort` on Codex or Claude roster entries. OpenCode providers use
 `variant` instead. Kimi K3 is a useful max-thinking alternative for complex
@@ -476,7 +484,7 @@ conflicting display option.
 
 Discovery separates configured intent from live evidence. It verifies that backend executables exist, checks Codex and Claude authentication, and reads OpenCode's configured provider/model catalog. Dispatch refuses profiles proven unavailable before creating a run. If a CLI does not expose a trustworthy model catalog—or a bounded probe fails—the profile is labeled `unknown` and dispatch continues with an explicit warning instead of guessing. OpenCode profiles with an explicit model are rejected when that provider/model is absent from `opencode models`.
 
-The default roster includes `kimi` and `kimi-max`, both backed by OpenCode's `kimi-for-coding/k3` model. The first is the flagship generalist for complex coding, long-context, and visual work; `kimi-max` enables Kimi's only explicit thinking variant, `max`, for hard design and integration work. Override or remove those entries in the normal global or project roster config if a Kimi Code plan is not connected.
+The default roster also includes `kimi` and `kimi-max`, both backed by OpenCode's `kimi-for-coding/k3` model. The first is the flagship generalist for complex coding, long-context, and visual work; `kimi-max` enables Kimi's only explicit thinking variant, `max`, for hard design and integration work. Override or remove those entries in the normal global or project roster config if a Kimi Code plan is not connected.
 
 ### Optional Ponytail efficiency layer
 

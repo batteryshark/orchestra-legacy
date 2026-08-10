@@ -260,7 +260,7 @@ def bootstrap_policy(cfg: Mapping[str, Any]) -> RosterPolicy:
             model = codex_default_model if backend == "codex" else None
         role = str(raw.get("role") or "")
         enabled = backend in availability.BACKENDS
-        tier = _infer_tier(name, role)
+        tier = _infer_tier(name, role, raw.get("tier"))
         capabilities = _infer_capabilities(tier, role)
         modes = _infer_modes(name, tier, role)
         contraindications = _infer_contraindications(role)
@@ -1522,7 +1522,11 @@ def _capability_lane(
     return backend, str(profile.get("sandbox") or "workspace-write")
 
 
-def _infer_tier(name: str, role: str) -> str:
+def _infer_tier(name: str, role: str, explicit: Any = None) -> str:
+    if isinstance(explicit, int) and not isinstance(explicit, bool):
+        by_level = {level: tier for tier, level in TIERS.items()}
+        if explicit in by_level:
+            return by_level[explicit]
     text = f"{name} {role}".casefold()
     if any(
         phrase in text

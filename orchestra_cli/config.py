@@ -64,12 +64,18 @@ env_passthrough = []
 [agents.minimax]
 backend = "opencode"
 model = "minimax-coding-plan/MiniMax-M3"
-role = "workhorse — first choice for routine implementation and grunt work (the 'Sonnet' tier)"
+role = "mechanical fallback — fully specified work only; pair with a stronger reviewer"
+
+[agents.deepseek-flash]
+backend = "opencode"
+model = "deepseek/deepseek-v4-flash"
+tier = 1
+role = "low-cost procedural default — read and execute a fully specified worklist; do not use for open-ended inference"
 
 [agents.glm]
 backend = "opencode"
 model = "zhipuai-coding-plan/glm-5.2"
-role = "strong generalist — standard tier for normal feature work"
+role = "optional generalist alternative for normal feature work"
 
 [agents.glm-max]
 backend = "opencode"
@@ -92,24 +98,17 @@ role = "Kimi K3 max-thinking tier — hard design, debugging, and integration wo
 
 [agents.codex]
 backend = "codex"
-# model omitted -> uses ~/.codex/config.toml default (gpt-5.6-sol)
-# effort = "high"   # override reasoning effort for workers (codex config default: xhigh)
-role = "really tough thinking only — heaviest tier, use sparingly"
-
-[agents.codex-terra]
-backend = "codex"
-model = "gpt-5.6-terra"
+model = "gpt-5.6-sol"
 effort = "high"
-role = "fast Code Mode engineer for medium implementation and review tasks"
-# Bounded trial: JavaScript/V8 orchestration can collapse independent tool
-# calls into one model step. Terra advertises Code Mode support; keep the
-# feature profile-scoped while Codex marks it under development. Suppress the
-# generic unstable-feature banner for this intentional opt-in; model-specific
-# compatibility warnings remain visible.
-extra_args = [
-  "--enable", "code_mode",
-  "-c", "suppress_unstable_features_warning=true",
-]
+tier = 3
+role = "heavy reasoning default — complex or open-ended diagnosis, architecture, and feature work"
+
+[agents.luna-xhigh]
+backend = "codex"
+model = "gpt-5.6-luna"
+effort = "xhigh"
+tier = 2
+role = "bounded-inference default — interpret a less-specified task of limited complexity; escalate open-ended diagnosis to Sol"
 
 [agents.claude]
 backend = "claude"

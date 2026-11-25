@@ -1,3 +1,5 @@
+> **Archived.** This is the first version of Orchestra; it was replaced by later rewrites and is no longer maintained. Work continues in [orchestra-next](https://github.com/batteryshark/orchestra-next).
+
 <p align="center">
   <img src="docs/assets/orchestra-logo.svg" alt="Orchestra" width="420">
 </p>
